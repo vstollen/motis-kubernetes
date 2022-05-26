@@ -3,11 +3,10 @@ kind: Pod
 metadata:
   name: motis
 spec:
-  securityContext:
-    fsGroup: 1000
   containers:
   - name: motis
     image: ghcr.io/motis-project/motis:latest
+#    command: [ "sleep", "infinity" ]
     ports:
     - containerPort: 8080
     volumeMounts:
@@ -15,6 +14,8 @@ spec:
       mountPath: /data
     - name: input-volume
       mountPath: /input
+  securityContext:
+    fsGroup: 999
   volumes:
   - name: data-volume
     persistentVolumeClaim:

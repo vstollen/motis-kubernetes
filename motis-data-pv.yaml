@@ -4,8 +4,6 @@ metadata:
   name: motis-data-pv
   labels:
     type: local
-  annotations:
-    pv.beta.kubernetes.io/gid: "1000"
 spec:
   storageClassName: manual
   capacity:
@@ -13,4 +11,4 @@ spec:
   accessModes:
     - ReadWriteOnce
   hostPath:
-    path: "/home/docker/data"
+    path: "/data/motis/data/"

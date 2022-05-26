@@ -11,4 +11,4 @@ spec:
   accessModes:
     - ReadOnlyMany
   hostPath:
-    path: "/home/docker/input"
+    path: "/data/motis/input/"
