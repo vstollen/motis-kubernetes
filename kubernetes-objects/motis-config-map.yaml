@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: motis-test
+data:
+  config-file: |
+    modules=routing
+    modules=lookup
+    modules=guesser
+    modules=ppr
+    modules=address
+    modules=intermodal
+    modules=osrm
+    modules=railviz
+    modules=tiles
+
+    intermodal.router=tripbased
+
+    dataset.cache_graph=true
+
+    [import]
+    paths=schedule:/input/hrd
+    paths=osm:/input/koeln-regbez-latest.osm.pbf
+    data_dir=/data
+
+    [tiles]
+    profile=/motis/tiles-profiles/background.lua
+
+    [osrm]
+    profiles=/motis/osrm-profiles/car.lua
+    profiles=/motis/osrm-profiles/bike.lua
+
+    [ppr]
+    profile=/motis/ppr-profiles/default.json
+
+  schedules: |
+    https://opendata.avv.de/current_GTFS/AVV_GTFS_mit_SPNV.zip
+
+  osm: |
+    https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez-latest.osm.pbf

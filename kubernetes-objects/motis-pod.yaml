@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: motis
+spec:
+  containers:
+  - name: motis
+    image: ghcr.io/motis-project/motis:latest
+#    command: [ "sleep", "infinity" ]
+    ports:
+    - containerPort: 8080
+    volumeMounts:
+    - name: data-volume
+      mountPath: /data
+    - name: input-volume
+      mountPath: /input
+#  securityContext:
+#    fsGroup: 999
+#    runAsUser: 1000
+#    runAsGroup: 999
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: motis-data-claim-khckq
+  - name: input-volume
+    persistentVolumeClaim:
+      claimName: motis-input-pvc

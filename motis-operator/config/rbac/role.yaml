@@ -1,0 +1,59 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - datasets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - datasets/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - datasets/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - motis
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - motis/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - motis/status
+  verbs:
+  - get
+  - patch
+  - update

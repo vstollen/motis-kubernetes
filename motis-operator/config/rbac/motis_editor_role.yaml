@@ -1,0 +1,24 @@
+# permissions for end users to edit motis.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: motis-editor-role
+rules:
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - motis
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - motis.motis-project.de
+  resources:
+  - motis/status
+  verbs:
+  - get

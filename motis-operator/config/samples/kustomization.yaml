@@ -1,0 +1,5 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- motis_v1alpha1_dataset.yaml
+- motis_v1alpha1_motis.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples
