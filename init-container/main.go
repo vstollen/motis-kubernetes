@@ -6,8 +6,14 @@ import (
 	"strings"
 )
 
+const schedulesConfigPath = "/config/schedules"
+const osmConfigPath = "/config/osm"
+
+const schedulesDataPath = "/input/schedule"
+const osmDataFolder = "/input"
+
 func main() {
-	scheduleUrls, err := script.File("schedules.txt").Slice()
+	scheduleUrls, err := script.File(schedulesConfigPath).Slice()
 	if err != nil {
 		panic(fmt.Errorf("error reading schedule URLs: %w", err))
 	}
@@ -19,7 +25,6 @@ func main() {
 	}
 	tmpDir = strings.Replace(tmpDir, "\n", "", -1)
 	for _, url := range scheduleUrls {
-
 		script.Exec(fmt.Sprintf("wget -P %v %v", tmpDir, url)).Wait()
 	}
 	script.Echo(fmt.Sprintf("Downloaded files to %v", tmpDir)).Stdout()
@@ -28,15 +33,15 @@ func main() {
 	if err != nil {
 		fmt.Printf("Error listing files: %v", err)
 	}
-	script.ListFiles(tmpDir).ExecForEach("unzip {{.}} -d schedules").Stdout()
+	script.ListFiles(tmpDir).ExecForEach(fmt.Sprintf("unzip {{.}} -d %v", schedulesDataPath)).Stdout()
 
-	mapUrls, err := script.File("osm.txt").Slice()
+	mapUrls, err := script.File(osmConfigPath).Slice()
 	if err != nil {
 		panic(fmt.Errorf("error reading osm URLs: %w", err))
 	}
 
 	fmt.Println("Downloading OpenStreetMap data...")
 	for _, url := range mapUrls {
-		script.Exec(fmt.Sprintf("wget %v", url)).Wait()
+		script.Exec(fmt.Sprintf("wget -P %v %v", osmDataFolder, url)).Wait()
 	}
 }
