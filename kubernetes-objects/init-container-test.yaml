@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: motis-test
+data:
+  schedules: |
+    https://opendata.avv.de/current_GTFS/AVV_GTFS_mit_SPNV.zip
+
+  osm: |
+    https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez-latest.osm.pbf
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: motis-input-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: init
+spec:
+  template:
+    spec:
+      containers:
+        - name: motis-init
+          image: ghcr.io/vstollen/motis-init:0.1.1
+          volumeMounts:
+            - name: config-volume
+              mountPath: /config
+            - name: input-volume
+              mountPath: /input
+      volumes:
+        - name: config-volume
+          configMap:
+            name: motis-test
+        - name: input-volume
+          persistentVolumeClaim:
+            claimName: motis-input-pvc
+      restartPolicy: Never

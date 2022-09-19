@@ -17,4 +17,6 @@ WORKDIR /
 COPY --from=build /init-script /init-script
 COPY schedules.txt test.txt
 
+LABEL org.opencontainers.image.source="https://github.com/vstollen/motis-kubernetes"
+
 ENTRYPOINT ["/init-script"]
