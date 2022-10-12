@@ -99,22 +99,6 @@ spec:
           status:
             description: DatasetStatus defines the observed state of Dataset
             properties:
-              dataVolume:
-                description: A pointer to the pvc to the volume used to store the
-                  processed data.
-                properties:
-                  claimName:
-                    description: 'claimName is the name of a PersistentVolumeClaim
-                      in the same namespace as the pod using this volume. More info:
-                      https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims'
-                    type: string
-                  readOnly:
-                    description: readOnly Will force the ReadOnly setting in VolumeMounts.
-                      Default false.
-                    type: boolean
-                required:
-                - claimName
-                type: object
               finishedProcessing:
                 description: True after the processing job finished running on the
                   data volume.

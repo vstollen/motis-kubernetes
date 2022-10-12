@@ -42,11 +42,6 @@ type DatasetStatus struct {
 	// +optional
 	InputVolume *corev1.PersistentVolumeClaimVolumeSource `json:"inputVolume,omitempty"`
 
-	// A pointer to the pvc to the volume used to store
-	// the processed data.
-	// +optional
-	DataVolume *corev1.PersistentVolumeClaimVolumeSource `json:"dataVolume,omitempty"`
-
 	// The name of the processing job
 	// +optional
 	ProcessingJobName string `json:"processingJobName,omitempty"`

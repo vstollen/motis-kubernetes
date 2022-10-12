@@ -115,7 +115,9 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 					{
 						Name: "data-volume",
 						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: dataset.Status.DataVolume,
+							PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
+								ClaimName: motis.Name + "-data",
+							},
 						},
 					},
 					{

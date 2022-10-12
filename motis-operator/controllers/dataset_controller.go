@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -74,9 +75,24 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	if dataset.Status.DataVolume == nil {
+	dataPVC := &corev1.PersistentVolumeClaim{}
+	err := r.Get(ctx, types.NamespacedName{Name: dataset.Name + "-data", Namespace: dataset.Namespace}, dataPVC)
+	if err != nil && errors.IsNotFound(err) {
 		log.Info("No data volume claimed. Creating PVC")
-		return r.createDataPVC(ctx, dataset, log)
+		dataPVC, err := r.dataPvcForDataset(dataset)
+		if err != nil {
+			log.Error(err, "Failed to define new PVC resource for dataset data")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Creating new PVC", "PVC.Namespace", dataPVC.Namespace, "PVC.Name", dataPVC.Name)
+		if err = r.Create(ctx, dataPVC); err != nil {
+			log.Error(err, "Failed to create new PVC", "PVC.Namespace", dataPVC.Namespace, "PVC.Name", dataPVC.Name)
+			return ctrl.Result{}, err
+		}
+	} else if err != nil {
+		log.Error(err, "Failed to get dataPVC")
+		return ctrl.Result{}, err
 	}
 
 	if !dataset.Status.StartedProcessing {
@@ -170,7 +186,7 @@ func (r *DatasetReconciler) createProcessingJob(ctx context.Context, dataset *mo
 						{
 							Name: "data-volume",
 							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: dataset.Status.DataVolume,
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: dataset.Name + "-data"},
 							},
 						},
 						{
@@ -256,11 +272,11 @@ func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1
 	return nil
 }
 
-func (r *DatasetReconciler) createDataPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) (ctrl.Result, error) {
+func (r *DatasetReconciler) dataPvcForDataset(dataset *motisv1alpha1.Dataset) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "motis-data-claim-",
-			Namespace:    dataset.Namespace,
+			Name:      dataset.Name + "-data",
+			Namespace: dataset.Namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -274,28 +290,11 @@ func (r *DatasetReconciler) createDataPVC(ctx context.Context, dataset *motisv1a
 		},
 	}
 
-	err := ctrl.SetControllerReference(dataset, pvc, r.Scheme)
-	if err != nil {
-		log.Error(err, "unable to set controller reference on data pvc")
-		return ctrl.Result{}, err
+	if err := ctrl.SetControllerReference(dataset, pvc, r.Scheme); err != nil {
+		return nil, err
 	}
 
-	err = r.Client.Create(ctx, pvc)
-	if err != nil {
-		log.Error(err, "unable to create data volume pvc")
-		return ctrl.Result{}, err
-	}
-
-	dataset.Status.DataVolume = &corev1.PersistentVolumeClaimVolumeSource{
-		ClaimName: pvc.Name,
-	}
-
-	err = r.Client.Status().Update(ctx, dataset)
-	if err != nil {
-		log.Error(err, "unable to update status with new data pvc")
-		return ctrl.Result{}, err
-	}
-	return ctrl.Result{}, nil
+	return pvc, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
