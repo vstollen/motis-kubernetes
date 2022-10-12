@@ -63,7 +63,15 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	if dataset.Status.InputVolume == nil {
 		log.Info("No input volume claimed. Creating PVC")
-		return r.createInputPVC(ctx, dataset, log)
+		if err := r.createInputPVC(ctx, dataset, log); err != nil {
+			log.Error(err, "unable to creat input PVC")
+			return ctrl.Result{}, err
+		}
+
+		if err := r.Get(ctx, req.NamespacedName, dataset); err != nil {
+			log.Error(err, "Failed to re-fetch dataset")
+			return ctrl.Result{}, err
+		}
 	}
 
 	if dataset.Status.DataVolume == nil {
@@ -206,7 +214,7 @@ func (r *DatasetReconciler) createProcessingJob(ctx context.Context, dataset *mo
 	return ctrl.Result{}, err
 }
 
-func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) (ctrl.Result, error) {
+func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) error {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: "motis-input-claim-",
@@ -227,13 +235,13 @@ func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1
 	err := ctrl.SetControllerReference(dataset, pvc, r.Scheme)
 	if err != nil {
 		log.Error(err, "unable to set controller reference on input pvc")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	err = r.Client.Create(ctx, pvc)
 	if err != nil {
 		log.Error(err, "unable to create input volume pvc")
-		return ctrl.Result{}, err
+		return err
 	}
 
 	dataset.Status.InputVolume = &corev1.PersistentVolumeClaimVolumeSource{
@@ -243,9 +251,9 @@ func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1
 	err = r.Client.Status().Update(ctx, dataset)
 	if err != nil {
 		log.Error(err, "unable to update status with new input pvc")
-		return ctrl.Result{}, err
+		return err
 	}
-	return ctrl.Result{}, nil
+	return nil
 }
 
 func (r *DatasetReconciler) createDataPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) (ctrl.Result, error) {
