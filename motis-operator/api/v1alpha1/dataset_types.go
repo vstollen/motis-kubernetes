@@ -30,14 +30,17 @@ type DatasetSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// The Input Volume containing schedule, map data, etc.
-	InputVolume *corev1.PersistentVolumeClaimVolumeSource `json:"inputVolume,omitempty"`
-	Config      *corev1.ConfigMapVolumeSource             `json:"config,omitempty"`
+	Config *corev1.ConfigMapVolumeSource `json:"config,omitempty"`
 }
 
 // DatasetStatus defines the observed state of Dataset
 type DatasetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
+
+	// A pointer to the pvc to the volume used to store the input data.
+	// +optional
+	InputVolume *corev1.PersistentVolumeClaimVolumeSource `json:"inputVolume,omitempty"`
 
 	// A pointer to the pvc to the volume used to store
 	// the processed data.

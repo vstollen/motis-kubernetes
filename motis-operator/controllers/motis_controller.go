@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -58,10 +57,6 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if motis.Spec.InputVolume == nil {
-		log.Error(errors.New("InputVolume not set"), "InputVolume must be specified")
-	}
-
 	if motis.Status.DatasetName == "" {
 		dataset := &motisv1alpha1.Dataset{
 			ObjectMeta: metav1.ObjectMeta{
@@ -69,8 +64,7 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 				Namespace:    req.Namespace,
 			},
 			Spec: motisv1alpha1.DatasetSpec{
-				InputVolume: motis.Spec.InputVolume,
-				Config:      motis.Spec.Config,
+				Config: motis.Spec.Config,
 			},
 		}
 
@@ -146,7 +140,7 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 					{
 						Name: "input-volume",
 						VolumeSource: corev1.VolumeSource{
-							PersistentVolumeClaim: motis.Spec.InputVolume,
+							PersistentVolumeClaim: dataset.Status.InputVolume,
 						},
 					},
 					{

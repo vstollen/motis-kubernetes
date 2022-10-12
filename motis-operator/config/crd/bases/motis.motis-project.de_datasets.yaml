@@ -36,12 +36,7 @@ spec:
             description: DatasetSpec defines the desired state of Dataset
             properties:
               config:
-                description: "Adapts a ConfigMap into a volume. \n The contents of
-                  the target ConfigMap's Data field will be presented in a volume
-                  as files using the keys in the Data field as the file names, unless
-                  the items element is populated with specific mappings of keys to
-                  paths. ConfigMap volumes support ownership management and SELinux
-                  relabeling."
+                description: The Input Volume containing schedule, map data, etc.
                 properties:
                   defaultMode:
                     description: 'defaultMode is optional: mode bits used to set permissions
@@ -100,21 +95,6 @@ spec:
                       must be defined
                     type: boolean
                 type: object
-              inputVolume:
-                description: The Input Volume containing schedule, map data, etc.
-                properties:
-                  claimName:
-                    description: 'claimName is the name of a PersistentVolumeClaim
-                      in the same namespace as the pod using this volume. More info:
-                      https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims'
-                    type: string
-                  readOnly:
-                    description: readOnly Will force the ReadOnly setting in VolumeMounts.
-                      Default false.
-                    type: boolean
-                required:
-                - claimName
-                type: object
             type: object
           status:
             description: DatasetStatus defines the observed state of Dataset
@@ -139,6 +119,22 @@ spec:
                 description: True after the processing job finished running on the
                   data volume.
                 type: boolean
+              inputVolume:
+                description: A pointer to the pvc to the volume used to store the
+                  input data.
+                properties:
+                  claimName:
+                    description: 'claimName is the name of a PersistentVolumeClaim
+                      in the same namespace as the pod using this volume. More info:
+                      https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims'
+                    type: string
+                  readOnly:
+                    description: readOnly Will force the ReadOnly setting in VolumeMounts.
+                      Default false.
+                    type: boolean
+                required:
+                - claimName
+                type: object
               processingJobName:
                 description: The name of the processing job
                 type: string

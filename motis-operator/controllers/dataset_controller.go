@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"errors"
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -61,8 +60,9 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if dataset.Spec.InputVolume == nil {
-		log.Error(errors.New("InputVolume not set"), "InputVolume must be specified")
+	if dataset.Status.InputVolume == nil {
+		log.Info("No input volume claimed. Creating PVC")
+		return r.createInputPVC(ctx, dataset, log)
 	}
 
 	if dataset.Status.DataVolume == nil {
@@ -118,16 +118,34 @@ func (r *DatasetReconciler) createProcessingJob(ctx context.Context, dataset *mo
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{
+							Name:  "motis-init",
+							Image: "ghcr.io/vstollen/motis-init:0.1.1",
+							//Image:   "busybox",
+							//Command: []string{"tail"},
+							//Args:    []string{"-f", "/dev/null"},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "config",
+									MountPath: "/config",
+								},
+								{
+									Name:      "input-volume",
+									MountPath: "/input",
+								},
+							},
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:    "motis",
 							Image:   "ghcr.io/motis-project/motis:latest",
 							Command: []string{"/motis/motis", "--system_config", "/system_config.ini", "-c", "/config/config.ini", "--mode", "test"},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "data-volume",
-									MountPath: "/data",
-								},
+							VolumeMounts: []corev1.VolumeMount{{
+								Name:      "data-volume",
+								MountPath: "/data",
+							},
 								{
 									Name:      "input-volume",
 									MountPath: "/input",
@@ -149,7 +167,7 @@ func (r *DatasetReconciler) createProcessingJob(ctx context.Context, dataset *mo
 						{
 							Name: "input-volume",
 							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: dataset.Spec.InputVolume,
+								PersistentVolumeClaim: dataset.Status.InputVolume,
 							},
 						},
 						{
@@ -185,6 +203,48 @@ func (r *DatasetReconciler) createProcessingJob(ctx context.Context, dataset *mo
 	}
 
 	return ctrl.Result{}, err
+}
+
+func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) (ctrl.Result, error) {
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: "motis-input-claim-",
+			Namespace:    dataset.Namespace,
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			AccessModes: []corev1.PersistentVolumeAccessMode{
+				corev1.ReadWriteOnce,
+			},
+			Resources: corev1.ResourceRequirements{
+				Requests: corev1.ResourceList{
+					"storage": resource.MustParse("10Gi"),
+				},
+			},
+		},
+	}
+
+	err := ctrl.SetControllerReference(dataset, pvc, r.Scheme)
+	if err != nil {
+		log.Error(err, "unable to set controller reference on input pvc")
+		return ctrl.Result{}, err
+	}
+
+	err = r.Client.Create(ctx, pvc)
+	if err != nil {
+		log.Error(err, "unable to create input volume pvc")
+		return ctrl.Result{}, err
+	}
+
+	dataset.Status.InputVolume = &corev1.PersistentVolumeClaimVolumeSource{
+		ClaimName: pvc.Name,
+	}
+
+	err = r.Client.Status().Update(ctx, dataset)
+	if err != nil {
+		log.Error(err, "unable to update status with new input pvc")
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 func (r *DatasetReconciler) createDataPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) (ctrl.Result, error) {
@@ -233,6 +293,7 @@ func (r *DatasetReconciler) createDataPVC(ctx context.Context, dataset *motisv1a
 func (r *DatasetReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&motisv1alpha1.Dataset{}).
+		Owns(&corev1.PersistentVolumeClaim{}).
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }

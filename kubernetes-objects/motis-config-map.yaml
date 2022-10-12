@@ -19,7 +19,7 @@ data:
     dataset.cache_graph=true
 
     [import]
-    paths=schedule:/input/hrd
+    paths=schedule:/input/schedule
     paths=osm:/input/koeln-regbez-latest.osm.pbf
     data_dir=/data
 

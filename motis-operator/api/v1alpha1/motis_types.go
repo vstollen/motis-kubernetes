@@ -30,8 +30,7 @@ type MotisSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// The Input Volume containing schedule, map data, etc.
-	InputVolume *corev1.PersistentVolumeClaimVolumeSource `json:"inputVolume,omitempty"`
-	Config      *corev1.ConfigMapVolumeSource             `json:"config,omitempty"`
+	Config *corev1.ConfigMapVolumeSource `json:"config,omitempty"`
 }
 
 // MotisStatus defines the observed state of Motis

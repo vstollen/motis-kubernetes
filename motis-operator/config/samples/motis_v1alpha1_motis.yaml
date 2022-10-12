@@ -4,10 +4,12 @@ metadata:
   name: motis-sample
 spec:
   # TODO(user): Add fields here
-  inputVolume:
-    claimName: motis-input-pvc
   config:
     name: motis-test
     items:
       - key: "config-file"
         path: "config.ini"
+      - key: "schedules"
+        path: "schedules"
+      - key: "osm"
+        path: "osm"
