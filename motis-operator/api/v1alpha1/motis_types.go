@@ -40,9 +40,6 @@ type MotisStatus struct {
 
 	// The name of the motis pod
 	PodName string `json:"podName,omitempty"`
-
-	// The name of the used dataset
-	DatasetName string `json:"datasetName,omitempty"`
 }
 
 //+kubebuilder:object:root=true

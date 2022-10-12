@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -42,10 +43,6 @@ type MotisReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Motis object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.1/pkg/reconcile
@@ -62,44 +59,23 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
-	if motis.Status.DatasetName == "" {
-		dataset := &motisv1alpha1.Dataset{
-			ObjectMeta: metav1.ObjectMeta{
-				GenerateName: "motis-dataset-",
-				Namespace:    req.Namespace,
-			},
-			Spec: motisv1alpha1.DatasetSpec{
-				Config: motis.Spec.Config,
-			},
-		}
-
-		err := ctrl.SetControllerReference(motis, dataset, r.Scheme)
-		if err != nil {
-			log.Error(err, "unable to set controller reference on dataset")
-			return ctrl.Result{}, err
-		}
-
-		err = r.Client.Create(ctx, dataset)
-		if err != nil {
-			log.Error(err, "unable to create motis dataset")
-			return ctrl.Result{}, err
-		}
-
-		motis.Status.DatasetName = dataset.Name
-		err = r.Client.Status().Update(ctx, motis)
-		if err != nil {
-			log.Error(err, "unable to update status with dataset name")
-			return ctrl.Result{}, err
-		}
-	}
-
 	dataset := &motisv1alpha1.Dataset{}
-	if err := r.Get(ctx, client.ObjectKey{
-		Name:      motis.Status.DatasetName,
-		Namespace: req.Namespace,
-	}, dataset); err != nil {
-		log.Error(err, "unable to fetch dataset")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	err := r.Get(ctx, types.NamespacedName{Name: motis.Name, Namespace: motis.Namespace}, dataset)
+	if err != nil && errors.IsNotFound(err) {
+		dataset, err := r.datasetForMotis(motis)
+		if err != nil {
+			log.Error(err, "Failed to define new Dataset resource for Motis")
+			return ctrl.Result{}, err
+		}
+
+		log.Info("Creating new Dataset", "Dataset.Namespace", dataset.Namespace, "Dataset.Name", dataset.Name)
+		if err = r.Create(ctx, dataset); err != nil {
+			log.Error(err, "Failed to create new Dataset", "Dataset.Namespace", dataset.Namespace, "Dataset.Name", dataset.Name)
+			return ctrl.Result{}, err
+		}
+	} else if err != nil {
+		log.Error(err, "Failed to get Dataset")
+		return ctrl.Result{}, err
 	}
 
 	if motis.Status.PodName == "" && dataset.Status.FinishedProcessing {
@@ -179,6 +155,23 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *MotisReconciler) datasetForMotis(motis *motisv1alpha1.Motis) (*motisv1alpha1.Dataset, error) {
+	dataset := &motisv1alpha1.Dataset{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      motis.Name,
+			Namespace: motis.Namespace,
+		},
+		Spec: motisv1alpha1.DatasetSpec{
+			Config: motis.Spec.Config,
+		},
+	}
+
+	if err := ctrl.SetControllerReference(motis, dataset, r.Scheme); err != nil {
+		return nil, err
+	}
+	return dataset, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

@@ -99,9 +99,6 @@ spec:
           status:
             description: MotisStatus defines the observed state of Motis
             properties:
-              datasetName:
-                description: The name of the used dataset
-                type: string
               podName:
                 description: The name of the motis pod
                 type: string
