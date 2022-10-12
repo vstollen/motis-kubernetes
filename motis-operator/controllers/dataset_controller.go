@@ -21,6 +21,7 @@ import (
 	"github.com/go-logr/logr"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -44,10 +45,6 @@ type DatasetReconciler struct {
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Dataset object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.1/pkg/reconcile
@@ -56,8 +53,12 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	dataset := &motisv1alpha1.Dataset{}
 	if err := r.Get(ctx, req.NamespacedName, dataset); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("dataset resource not found. Ignoring since object was likely deleted")
+			return ctrl.Result{}, nil
+		}
 		log.Error(err, "unable to fetch Dataset")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		return ctrl.Result{}, err
 	}
 
 	if dataset.Status.InputVolume == nil {

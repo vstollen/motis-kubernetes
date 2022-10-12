@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -53,8 +54,12 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	motis := &motisv1alpha1.Motis{}
 	if err := r.Get(ctx, req.NamespacedName, motis); err != nil {
-		log.Error(err, "unable to fetch Motis")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+		if errors.IsNotFound(err) {
+			log.Info("motis resource not found. Ignoring since object was likely deleted")
+			return ctrl.Result{}, nil
+		}
+		log.Error(err, "Failed to get motis resource")
+		return ctrl.Result{}, err
 	}
 
 	if motis.Status.DatasetName == "" {
