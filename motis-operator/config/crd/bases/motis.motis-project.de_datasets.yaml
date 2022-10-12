@@ -119,12 +119,6 @@ spec:
                 required:
                 - claimName
                 type: object
-              processingJobName:
-                description: The name of the processing job
-                type: string
-              startedProcessing:
-                description: True after the processing job is started
-                type: boolean
             type: object
         type: object
     served: true

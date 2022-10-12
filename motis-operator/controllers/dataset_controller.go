@@ -95,30 +95,32 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return ctrl.Result{}, err
 	}
 
-	if !dataset.Status.StartedProcessing {
-		result, err := r.createProcessingJob(ctx, dataset, log)
+	processingJob := &batchv1.Job{}
+	err = r.Get(ctx, types.NamespacedName{Name: dataset.Name, Namespace: dataset.Namespace}, processingJob)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("No processing job found. Starting processing job")
+		job, err := r.processingJobForDataset(dataset)
 		if err != nil {
-			return result, err
-		}
-
-		dataset.Status.StartedProcessing = true
-		err = r.Client.Status().Update(ctx, dataset)
-		if err != nil {
-			log.Error(err, "unable to update status with started processing job")
+			log.Error(err, "Failed to define new job resource for dataset processing job")
 			return ctrl.Result{}, err
 		}
+
+		log.Info("Creating new job", "job.Namespace", job.Namespace, "job.Name", job.Name)
+		if err = r.Create(ctx, job); err != nil {
+			log.Error(err, "Failed to create new job", "job.Namespace", job.Namespace, "job.Name", job.Name)
+			return ctrl.Result{}, err
+		}
+	} else if err != nil {
+		log.Error(err, "Failed to get processing job")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.Get(ctx, req.NamespacedName, dataset); err != nil {
+		log.Error(err, "Failed to re-fetch dataset")
+		return ctrl.Result{}, err
 	}
 
 	if !dataset.Status.FinishedProcessing {
-		var processingJob batchv1.Job
-		if err := r.Get(ctx, client.ObjectKey{
-			Namespace: req.Namespace,
-			Name:      dataset.Status.ProcessingJobName,
-		}, &processingJob); err != nil {
-			log.Error(err, "unable to list child jobs")
-			return ctrl.Result{}, err
-		}
-
 		for _, condition := range processingJob.Status.Conditions {
 			if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
 				dataset.Status.FinishedProcessing = true
@@ -132,102 +134,6 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	return ctrl.Result{}, nil
-}
-
-func (r *DatasetReconciler) createProcessingJob(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) (ctrl.Result, error) {
-	processJob := &batchv1.Job{
-		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "motis-processing-job-",
-			Namespace:    dataset.Namespace,
-		},
-		Spec: batchv1.JobSpec{
-			Template: corev1.PodTemplateSpec{
-				Spec: corev1.PodSpec{
-					InitContainers: []corev1.Container{
-						{
-							Name:  "motis-init",
-							Image: "ghcr.io/vstollen/motis-init:0.1.1",
-							//Image:   "busybox",
-							//Command: []string{"tail"},
-							//Args:    []string{"-f", "/dev/null"},
-							VolumeMounts: []corev1.VolumeMount{
-								{
-									Name:      "config",
-									MountPath: "/config",
-								},
-								{
-									Name:      "input-volume",
-									MountPath: "/input",
-								},
-							},
-						},
-					},
-					Containers: []corev1.Container{
-						{
-							Name:    "motis",
-							Image:   "ghcr.io/motis-project/motis:latest",
-							Command: []string{"/motis/motis", "--system_config", "/system_config.ini", "-c", "/config/config.ini", "--mode", "test"},
-							VolumeMounts: []corev1.VolumeMount{{
-								Name:      "data-volume",
-								MountPath: "/data",
-							},
-								{
-									Name:      "input-volume",
-									MountPath: "/input",
-								},
-								{
-									Name:      "config",
-									MountPath: "/config",
-								},
-							},
-						},
-					},
-					Volumes: []corev1.Volume{
-						{
-							Name: "data-volume",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: dataset.Name + "-data"},
-							},
-						},
-						{
-							Name: "input-volume",
-							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: dataset.Status.InputVolume,
-							},
-						},
-						{
-							Name: "config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: dataset.Spec.Config,
-							},
-						},
-					},
-					RestartPolicy: corev1.RestartPolicyNever,
-				},
-			},
-		},
-	}
-
-	err := ctrl.SetControllerReference(dataset, processJob, r.Scheme)
-	if err != nil {
-		log.Error(err, "unable to set controller reference on data pvc")
-		return ctrl.Result{}, err
-	}
-
-	err = r.Client.Create(ctx, processJob)
-	if err != nil {
-		log.Error(err, "unable to create processing job")
-		return ctrl.Result{}, err
-	}
-
-	dataset.Status.ProcessingJobName = processJob.Name
-	err = r.Client.Status().Update(ctx, dataset)
-	if err != nil {
-		log.Error(err, "unable to update status with processing job name")
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, err
 }
 
 func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) error {
@@ -295,6 +201,85 @@ func (r *DatasetReconciler) dataPvcForDataset(dataset *motisv1alpha1.Dataset) (*
 	}
 
 	return pvc, nil
+}
+
+func (r *DatasetReconciler) processingJobForDataset(dataset *motisv1alpha1.Dataset) (*batchv1.Job, error) {
+	processJob := &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      dataset.Name,
+			Namespace: dataset.Namespace,
+		},
+		Spec: batchv1.JobSpec{
+			Template: corev1.PodTemplateSpec{
+				Spec: corev1.PodSpec{
+					InitContainers: []corev1.Container{
+						{
+							Name:  "motis-init",
+							Image: "ghcr.io/vstollen/motis-init:0.1.1",
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "config",
+									MountPath: "/config",
+								},
+								{
+									Name:      "input-volume",
+									MountPath: "/input",
+								},
+							},
+						},
+					},
+					Containers: []corev1.Container{
+						{
+							Name:    "motis",
+							Image:   "ghcr.io/motis-project/motis:latest",
+							Command: []string{"/motis/motis", "--system_config", "/system_config.ini", "-c", "/config/config.ini", "--mode", "test"},
+							VolumeMounts: []corev1.VolumeMount{{
+								Name:      "data-volume",
+								MountPath: "/data",
+							},
+								{
+									Name:      "input-volume",
+									MountPath: "/input",
+								},
+								{
+									Name:      "config",
+									MountPath: "/config",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name: "data-volume",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: dataset.Name + "-data"},
+							},
+						},
+						{
+							Name: "input-volume",
+							VolumeSource: corev1.VolumeSource{
+								PersistentVolumeClaim: dataset.Status.InputVolume,
+							},
+						},
+						{
+							Name: "config",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: dataset.Spec.Config,
+							},
+						},
+					},
+					RestartPolicy: corev1.RestartPolicyNever,
+				},
+			},
+		},
+	}
+
+	err := ctrl.SetControllerReference(dataset, processJob, r.Scheme)
+	if err != nil {
+		return nil, err
+	}
+
+	return processJob, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

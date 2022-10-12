@@ -42,13 +42,6 @@ type DatasetStatus struct {
 	// +optional
 	InputVolume *corev1.PersistentVolumeClaimVolumeSource `json:"inputVolume,omitempty"`
 
-	// The name of the processing job
-	// +optional
-	ProcessingJobName string `json:"processingJobName,omitempty"`
-
-	// True after the processing job is started
-	StartedProcessing bool `json:"startedProcessing,omitempty"`
-
 	// True after the processing job finished running on the data volume.
 	FinishedProcessing bool `json:"finishedProcessing,omitempty"`
 }
