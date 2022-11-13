@@ -3,7 +3,6 @@ kind: Motis
 metadata:
   name: motis-sample
 spec:
-  # TODO(user): Add fields here
   config:
     name: motis-test
     items:

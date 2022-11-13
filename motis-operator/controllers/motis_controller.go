@@ -83,6 +83,9 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "motis-",
 				Namespace:    req.Namespace,
+				Labels: map[string]string{
+					"motis-project.de/name": "MotisWeb",
+				},
 			},
 			Spec: corev1.PodSpec{
 				Containers: []corev1.Container{
