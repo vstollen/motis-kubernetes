@@ -8,7 +8,7 @@ export default function Home() {
 
   return (
     <div className="flex justify-center p-20">
-      <section className="flex-auto max-w-2xl bg-zinc-50 rounded-md p-16">
+      <section className="max-w-2xl flex-auto rounded-md bg-zinc-50 p-16">
         <div className="">
           <h1 className="mb-16 text-xl font-bold">Create MOTIS instance</h1>
           <div className="flex flex-col gap-8">
@@ -22,10 +22,13 @@ export default function Home() {
               type="url"
               id="schedule"
               label="Schedule URL:"
-              placeholder="https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez-latest.osm.pbf"
-            />
-            <FormTextInput type="url" id="osm" label="Open Street Map (OSM):"
               placeholder="https://opendata.avv.de/current_GTFS/AVV_GTFS_mit_SPNV.zip"
+            />
+            <FormTextInput
+              type="url"
+              id="osm"
+              label="Open Street Map (OSM):"
+              placeholder="https://download.geofabrik.de/europe/germany/nordrhein-westfalen/koeln-regbez-latest.osm.pbf"
             />
           </div>
           <hr className="my-8" />
@@ -36,17 +39,17 @@ export default function Home() {
               checked={periodicRefreshs}
               onChange={() => setPeriodicRefreshs(!periodicRefreshs)}
             />
-            {periodicRefreshs && (
+            <div className={periodicRefreshs ? "" : "hidden"}>
               <FormTextInput
                 type="text"
                 id="refreshCron"
                 placeholder="0 3 * * *"
               />
-            )}
+            </div>
           </div>
           <hr className="my-8" />
           <FormCodeInput id="config" label="config.ini:" />
-          <button className="float-right mt-8 rounded-md bg-rose-600 hover:bg-rose-500 p-4 py-3 font-bold text-[hsl(347_100%_99%)] shadow shadow-rose-600/50 hover:shadow-rose-500/50 transition-all hover:shadow-md active:shadow">
+          <button className="float-right mt-8 rounded-md bg-rose-600 p-4 py-3 font-bold text-[hsl(347_100%_99%)] shadow shadow-rose-600/50 transition-all hover:bg-rose-500 hover:shadow-md hover:shadow-rose-500/50 active:shadow">
             Create MOTIS instance
           </button>
         </div>
