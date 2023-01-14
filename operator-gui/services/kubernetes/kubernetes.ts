@@ -1,8 +1,13 @@
-import k8s from "@kubernetes/client-node";
+import {
+  ApiextensionsV1Api,
+  CoreV1Api,
+  CustomObjectsApi,
+  KubeConfig,
+} from "@kubernetes/client-node";
 
-const kubeConfig = new k8s.KubeConfig();
+const kubeConfig = new KubeConfig();
 kubeConfig.loadFromDefault();
 
-export const coreV1Api = kubeConfig.makeApiClient(k8s.CoreV1Api);
-export const apiextensionsV1Api = kubeConfig.makeApiClient(k8s.ApiextensionsV1Api);
-export const customObjectsApi = kubeConfig.makeApiClient(k8s.CustomObjectsApi);
+export const coreV1Api = kubeConfig.makeApiClient(CoreV1Api);
+export const apiextensionsV1Api = kubeConfig.makeApiClient(ApiextensionsV1Api);
+export const customObjectsApi = kubeConfig.makeApiClient(CustomObjectsApi);
