@@ -3,8 +3,17 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import {coreV1Api, customObjectsApi} from "../../services/kubernetes/kubernetes";
 import {V1ConfigMap} from "@kubernetes/client-node";
 
-type Data = {
+interface BaseResponse {
   message: string
+}
+
+interface GetResponse extends BaseResponse {
+  instances: ListMotisInstance[]
+}
+
+type ListMotisInstance = {
+  name: string
+  status: string
 }
 
 type createMotisRequestBody = {
@@ -21,18 +30,36 @@ type ApiError = {
 
 export default async function handler(
     req: NextApiRequest,
-    res: NextApiResponse<Data | ApiError>
+    res: NextApiResponse<BaseResponse | GetResponse | ApiError>
 ) {
-  if (req.method != "POST") {
-    res.status(405).json({error: "HTTP method not allowed"});
-    return;
+  switch (req.method) {
+    case "GET":
+      await handleGetRequest(req, res);
+      break;
+    case "POST":
+      await handlePostRequest(req, res);
+      break;
+    default:
+      res.status(405).json({error: "HTTP method not allowed"});
+      return;
   }
-  await handlePostRequest(req, res);
 }
 
-async function handlePostRequest(req: NextApiRequest, res: NextApiResponse<Data>) {
+async function handleGetRequest(req: NextApiRequest, res: NextApiResponse<GetResponse>) {
+  const motisObjects = customObjectsApi.listNamespacedCustomObject("motis.motis-project.de", "v1alpha1", "default", "motis");
+  // @ts-ignore
+  const motisObjectsResponse = (await motisObjects).body.items.map((item) => {
+    return {
+      name: item.metadata.name,
+      status: "unknown"
+    }
+  })
+  console.log(await motisObjects);
+  res.status(200).json({message: "success", instances: motisObjectsResponse});
+}
+
+async function handlePostRequest(req: NextApiRequest, res: NextApiResponse<BaseResponse>) {
   const requestBody: createMotisRequestBody = req.body;
-  console.log(requestBody);
   const configMap = generateConfigMap(requestBody.name, requestBody.config, requestBody.scheduleUrl, requestBody.osmUrl);
   await coreV1Api.createNamespacedConfigMap("default", configMap);
   await customObjectsApi.createNamespacedCustomObject("motis.motis-project.de", "v1alpha1", "default", "motis", {
