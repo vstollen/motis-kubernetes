@@ -2,6 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import {coreV1Api, customObjectsApi} from "../../services/kubernetes/kubernetes";
 import {V1ConfigMap} from "@kubernetes/client-node";
+import {ListMotisInstance} from "../../types/api";
 
 interface BaseResponse {
   message: string
@@ -9,11 +10,6 @@ interface BaseResponse {
 
 interface GetResponse extends BaseResponse {
   instances: ListMotisInstance[]
-}
-
-type ListMotisInstance = {
-  name: string
-  status: string
 }
 
 type createMotisRequestBody = {
