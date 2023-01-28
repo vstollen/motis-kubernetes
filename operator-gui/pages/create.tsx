@@ -4,7 +4,7 @@ import FormCodeInput from "../components/FormCodeInput";
 import FormTextInput from "../components/FormTextInput";
 import CardLayout from "../components/layouts/CardLayout";
 import Button from "../components/Button";
-import Link from "next/link";
+import {router} from "next/client";
 
 export default function CreatePage() {
   const [name, setName] = useState("");
@@ -86,7 +86,8 @@ export default function CreatePage() {
           value={configIni}
           onChange={setConfigIni}
         />
-        <Button><Link href="/create">Create MOTIS instance</Link></Button>
+        <Button type={"primary"} onClick={() => handleSubmit()}>Create MOTIS instance</Button>
+        <Button type={"tertiary"} onClick={() => router.push("/")}>Cancel</Button>
       </>
     </CardLayout>
   );
