@@ -59,13 +59,20 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
-	dataset := &motisv1alpha1.Dataset{}
-	if err := r.Get(ctx, req.NamespacedName, dataset); client.IgnoreNotFound(err) != nil {
-		log.Error(err, "Failed to get Dataset")
+	datasetsInNamespace := &motisv1alpha1.DatasetList{}
+	if err := r.List(ctx, datasetsInNamespace, client.InNamespace(req.Namespace)); err != nil {
+		log.Error(err, "Failed to list Datasets")
 		return ctrl.Result{}, err
 	}
 
-	if dataset == nil || dataset.UID == "" {
+	var childDatasets []motisv1alpha1.Dataset
+	for _, dataset := range datasetsInNamespace.Items {
+		if metav1.IsControlledBy(&dataset, motis) {
+			childDatasets = append(childDatasets, dataset)
+		}
+	}
+
+	if len(childDatasets) == 0 {
 		if err := r.createDataset(ctx, motis, log); err != nil {
 			log.Error(err, "Failed to create new Dataset")
 			return ctrl.Result{}, err
@@ -73,15 +80,17 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
+	latestFinishedDataset := findLatestFinishedDataset(&childDatasets)
+
 	deployment := &appsv1.Deployment{}
 	if err := r.Get(ctx, req.NamespacedName, deployment); client.IgnoreNotFound(err) != nil {
 		log.Error(err, "Failed to get Motis deployment")
 		return ctrl.Result{}, err
 	}
 
-	if dataset.HasFinishedProcessing() && (deployment == nil || deployment.UID == "") {
-		log.Info("Dataset has finished processing and there currently is no deployment. Starting new deployment.")
-		if err := r.createDeployment(ctx, motis, dataset, log); err != nil {
+	if latestFinishedDataset != nil && (deployment == nil || deployment.UID == "") {
+		log.Info("Dataset has finished processing but there currently is no deployment. Starting new deployment.")
+		if err := r.createDeployment(ctx, motis, latestFinishedDataset, log); err != nil {
 			log.Error(err, "Error creating Motis deployment")
 		}
 	}
@@ -125,8 +134,8 @@ func (r *MotisReconciler) createDeployment(ctx context.Context, motis *motisv1al
 func datasetForMotis(motis *motisv1alpha1.Motis) *motisv1alpha1.Dataset {
 	return &motisv1alpha1.Dataset{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      motis.Name,
-			Namespace: motis.Namespace,
+			GenerateName: motis.Name + "-",
+			Namespace:    motis.Namespace,
 		},
 		Spec: motisv1alpha1.DatasetSpec{
 			Config: motis.Spec.Config,
@@ -202,10 +211,30 @@ func deploymentForMotis(motis *motisv1alpha1.Motis, dataset *motisv1alpha1.Datas
 	}
 }
 
+func findLatestFinishedDataset(datasets *[]motisv1alpha1.Dataset) *motisv1alpha1.Dataset {
+	var latestFinishedDataset *motisv1alpha1.Dataset
+
+	for _, dataset := range *datasets {
+		if dataset.HasFinishedProcessing() {
+			if latestFinishedDataset == nil {
+				latestFinishedDataset = &dataset
+				continue
+			}
+
+			if dataset.CreationTimestamp.After(latestFinishedDataset.CreationTimestamp.Time) {
+				latestFinishedDataset = &dataset
+			}
+		}
+	}
+
+	return latestFinishedDataset
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *MotisReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&motisv1alpha1.Motis{}).
 		Owns(&motisv1alpha1.Dataset{}).
+		Owns(&appsv1.Deployment{}).
 		Complete(r)
 }
