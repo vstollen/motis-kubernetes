@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"github.com/go-logr/logr"
+	"github.com/robfig/cron/v3"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -27,6 +28,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"time"
 
 	motisv1alpha1 "github.com/vstollen/motis-operator/api/v1alpha1"
 )
@@ -80,22 +82,45 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
+	log.Info("Dataset count", "datasets in namespace", len(datasetsInNamespace.Items), "childDatasets", len(childDatasets))
+
+	latestDataset := findLatestDataset(&childDatasets)
+	scheduledResult := ctrl.Result{}
+
+	if motis.Spec.UpdateSchedule != "" {
+		schedule, err := cron.ParseStandard(motis.Spec.UpdateSchedule)
+		if err != nil {
+			log.Error(err, "Error parsing update schedule. Ignoring update schedule")
+		}
+
+		nextRun := schedule.Next(latestDataset.CreationTimestamp.Time)
+		if nextRun.Before(time.Now()) {
+			log.Info("New update scheduled for now. Creating a new Dataset.", "nextRun", nextRun.String(), "latestDatasetCreation", latestDataset.CreationTimestamp.String())
+			if err := r.createDataset(ctx, motis, log); err != nil {
+				log.Error(err, "Failed to create new Dataset")
+			}
+		}
+
+		scheduledResult.RequeueAfter = schedule.Next(time.Now()).Sub(time.Now())
+	}
+
 	latestFinishedDataset := findLatestFinishedDataset(&childDatasets)
 
 	deployment := &appsv1.Deployment{}
 	if err := r.Get(ctx, req.NamespacedName, deployment); client.IgnoreNotFound(err) != nil {
 		log.Error(err, "Failed to get Motis deployment")
-		return ctrl.Result{}, err
+		return scheduledResult, err
 	}
 
 	if latestFinishedDataset != nil && (deployment == nil || deployment.UID == "") {
 		log.Info("Dataset has finished processing but there currently is no deployment. Starting new deployment.")
 		if err := r.createDeployment(ctx, motis, latestFinishedDataset, log); err != nil {
 			log.Error(err, "Error creating Motis deployment")
+			return scheduledResult, err
 		}
 	}
 
-	return ctrl.Result{}, nil
+	return scheduledResult, nil
 }
 
 func (r *MotisReconciler) createDataset(ctx context.Context, motis *motisv1alpha1.Motis, log logr.Logger) error {
@@ -211,18 +236,37 @@ func deploymentForMotis(motis *motisv1alpha1.Motis, dataset *motisv1alpha1.Datas
 	}
 }
 
+func findLatestDataset(datasets *[]motisv1alpha1.Dataset) *motisv1alpha1.Dataset {
+	var latestDataset *motisv1alpha1.Dataset
+
+	for _, dataset := range *datasets {
+		if latestDataset == nil {
+			latestDataset = &motisv1alpha1.Dataset{}
+			*latestDataset = dataset
+			continue
+		}
+
+		if dataset.CreationTimestamp.After(latestDataset.CreationTimestamp.Time) {
+			*latestDataset = dataset
+		}
+	}
+
+	return latestDataset
+}
+
 func findLatestFinishedDataset(datasets *[]motisv1alpha1.Dataset) *motisv1alpha1.Dataset {
 	var latestFinishedDataset *motisv1alpha1.Dataset
 
 	for _, dataset := range *datasets {
 		if dataset.HasFinishedProcessing() {
 			if latestFinishedDataset == nil {
-				latestFinishedDataset = &dataset
+				latestFinishedDataset = &motisv1alpha1.Dataset{}
+				*latestFinishedDataset = dataset
 				continue
 			}
 
 			if dataset.CreationTimestamp.After(latestFinishedDataset.CreationTimestamp.Time) {
-				latestFinishedDataset = &dataset
+				*latestFinishedDataset = dataset
 			}
 		}
 	}

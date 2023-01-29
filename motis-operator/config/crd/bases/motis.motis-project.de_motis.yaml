@@ -95,6 +95,8 @@ spec:
                       must be defined
                     type: boolean
                 type: object
+              updateSchedule:
+                type: string
             type: object
           status:
             description: MotisStatus defines the observed state of Motis

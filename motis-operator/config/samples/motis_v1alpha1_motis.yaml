@@ -12,3 +12,4 @@ spec:
         path: "schedules"
       - key: "osm"
         path: "osm"
+  updateSchedule: "*/4 * * * *"
