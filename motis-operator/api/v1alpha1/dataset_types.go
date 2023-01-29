@@ -42,10 +42,10 @@ type DatasetStatus struct {
 
 	// A pointer to the pvc of the Motis input volume.
 	// +optional
-	InputVolume *corev1.PersistentVolumeClaimVolumeSource `json:"inputVolume,omitempty"`
+	InputVolume *corev1.VolumeSource `json:"inputVolume,omitempty"`
 
 	// A pointer to the pvc of the Motis data volume.
-	DataVolume *corev1.PersistentVolumeClaimVolumeSource `json:"dataVolume,omitempty"`
+	DataVolume *corev1.VolumeSource `json:"dataVolume,omitempty"`
 }
 
 type DatasetConditionType string
@@ -72,6 +72,16 @@ type Dataset struct {
 
 	Spec   DatasetSpec   `json:"spec,omitempty"`
 	Status DatasetStatus `json:"status,omitempty"`
+}
+
+func (d *Dataset) HasFinishedProcessing() bool {
+	for _, condition := range *d.Status.Conditions {
+		if condition.Type == DatasetReady {
+			return condition.Status == corev1.ConditionTrue
+		}
+	}
+
+	return false
 }
 
 //+kubebuilder:object:root=true

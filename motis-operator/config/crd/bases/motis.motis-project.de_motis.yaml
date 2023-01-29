@@ -98,10 +98,6 @@ spec:
             type: object
           status:
             description: MotisStatus defines the observed state of Motis
-            properties:
-              podName:
-                description: The name of the motis pod
-                type: string
             type: object
         type: object
     served: true

@@ -122,13 +122,17 @@ func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 func (r *DatasetReconciler) updateStatus(ctx context.Context, req ctrl.Request, dataset *motisv1alpha1.Dataset, inputVolume *corev1.PersistentVolumeClaim, dataVolume *corev1.PersistentVolumeClaim, processingJob *batchv1.Job, log logr.Logger) error {
 	if inputVolume != nil {
-		dataset.Status.InputVolume = &corev1.PersistentVolumeClaimVolumeSource{ClaimName: inputVolume.Name}
+		dataset.Status.InputVolume = &corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: inputVolume.Name},
+		}
 	} else {
 		dataset.Status.InputVolume = nil
 	}
 
 	if dataVolume != nil {
-		dataset.Status.DataVolume = &corev1.PersistentVolumeClaimVolumeSource{ClaimName: dataVolume.Name}
+		dataset.Status.DataVolume = &corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: dataVolume.Name},
+		}
 	} else {
 		dataset.Status.DataVolume = nil
 	}
@@ -308,7 +312,7 @@ func (r *DatasetReconciler) processingJobForDataset(dataset *motisv1alpha1.Datas
 						{
 							Name: "input-volume",
 							VolumeSource: corev1.VolumeSource{
-								PersistentVolumeClaim: dataset.Status.InputVolume,
+								PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: dataset.Name + "-input"},
 							},
 						},
 						{

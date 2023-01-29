@@ -37,9 +37,6 @@ type MotisSpec struct {
 type MotisStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	// The name of the motis pod
-	PodName string `json:"podName,omitempty"`
 }
 
 //+kubebuilder:object:root=true
