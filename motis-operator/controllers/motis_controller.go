@@ -78,7 +78,7 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, err
 	}
 
-	if motis.Status.PodName == "" && dataset.Status.FinishedProcessing {
+	if motis.Status.PodName == "" && /* dataset.Status.FinishedProcessing */ false {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				GenerateName: "motis-",

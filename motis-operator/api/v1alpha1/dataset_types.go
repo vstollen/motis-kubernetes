@@ -29,7 +29,7 @@ type DatasetSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// The Input Volume containing schedule, map data, etc.
+	// The config map including config.ini, osm url and schedule url
 	Config *corev1.ConfigMapVolumeSource `json:"config,omitempty"`
 }
 
@@ -38,12 +38,28 @@ type DatasetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// A pointer to the pvc to the volume used to store the input data.
+	Conditions *[]DatasetCondition `json:"conditions"`
+
+	// A pointer to the pvc of the Motis input volume.
 	// +optional
 	InputVolume *corev1.PersistentVolumeClaimVolumeSource `json:"inputVolume,omitempty"`
 
-	// True after the processing job finished running on the data volume.
-	FinishedProcessing bool `json:"finishedProcessing,omitempty"`
+	// A pointer to the pvc of the Motis data volume.
+	DataVolume *corev1.PersistentVolumeClaimVolumeSource `json:"dataVolume,omitempty"`
+}
+
+type DatasetConditionType string
+
+const (
+	// DatasetReady means the Dataset has finished its processing
+	DatasetReady DatasetConditionType = "Ready"
+)
+
+type DatasetCondition struct {
+	// Type of job condition, Complete or Failed.
+	Type DatasetConditionType `json:"type"`
+	// Status of the condition, one of True, False, Unknown.
+	Status corev1.ConditionStatus `json:"status" protobuf:"bytes,2,opt,name=status,casttype=k8s.io/api/core/v1.ConditionStatus"`
 }
 
 //+kubebuilder:object:root=true

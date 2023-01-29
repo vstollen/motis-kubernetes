@@ -36,7 +36,8 @@ spec:
             description: DatasetSpec defines the desired state of Dataset
             properties:
               config:
-                description: The Input Volume containing schedule, map data, etc.
+                description: The config map including config.ini, osm url and schedule
+                  url
                 properties:
                   defaultMode:
                     description: 'defaultMode is optional: mode bits used to set permissions
@@ -99,13 +100,22 @@ spec:
           status:
             description: DatasetStatus defines the observed state of Dataset
             properties:
-              finishedProcessing:
-                description: True after the processing job finished running on the
-                  data volume.
-                type: boolean
-              inputVolume:
-                description: A pointer to the pvc to the volume used to store the
-                  input data.
+              conditions:
+                items:
+                  properties:
+                    status:
+                      description: Status of the condition, one of True, False, Unknown.
+                      type: string
+                    type:
+                      description: Type of job condition, Complete or Failed.
+                      type: string
+                  required:
+                  - status
+                  - type
+                  type: object
+                type: array
+              dataVolume:
+                description: A pointer to the pvc of the Motis data volume.
                 properties:
                   claimName:
                     description: 'claimName is the name of a PersistentVolumeClaim
@@ -119,6 +129,23 @@ spec:
                 required:
                 - claimName
                 type: object
+              inputVolume:
+                description: A pointer to the pvc of the Motis input volume.
+                properties:
+                  claimName:
+                    description: 'claimName is the name of a PersistentVolumeClaim
+                      in the same namespace as the pod using this volume. More info:
+                      https://kubernetes.io/docs/concepts/storage/persistent-volumes#persistentvolumeclaims'
+                    type: string
+                  readOnly:
+                    description: readOnly Will force the ReadOnly setting in VolumeMounts.
+                      Default false.
+                    type: boolean
+                required:
+                - claimName
+                type: object
+            required:
+            - conditions
             type: object
         type: object
     served: true

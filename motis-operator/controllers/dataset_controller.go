@@ -51,96 +51,127 @@ type DatasetReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.12.1/pkg/reconcile
 func (r *DatasetReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx)
+	log.Info("Starting reconciliation")
 
 	dataset := &motisv1alpha1.Dataset{}
+	log.Info("Fetching dataset")
 	if err := r.Get(ctx, req.NamespacedName, dataset); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("dataset resource not found. Ignoring since object was likely deleted")
+			log.Info("Dataset resource not found. Ignoring since object was likely deleted.")
 			return ctrl.Result{}, nil
 		}
-		log.Error(err, "unable to fetch Dataset")
+		log.Error(err, "Error fetching dataset")
 		return ctrl.Result{}, err
 	}
 
-	if dataset.Status.InputVolume == nil {
-		log.Info("No input volume claimed. Creating PVC")
-		if err := r.createInputPVC(ctx, dataset, log); err != nil {
-			log.Error(err, "unable to creat input PVC")
-			return ctrl.Result{}, err
-		}
-
-		if err := r.Get(ctx, req.NamespacedName, dataset); err != nil {
-			log.Error(err, "Failed to re-fetch dataset")
-			return ctrl.Result{}, err
-		}
+	inputVolume := &corev1.PersistentVolumeClaim{}
+	log.Info("Fetching input volume")
+	if err := r.Get(ctx, types.NamespacedName{Name: req.Name + "-input", Namespace: req.Namespace}, inputVolume); client.IgnoreNotFound(err) != nil {
+		log.Error(err, "Error retrieving input volume")
+		return ctrl.Result{}, err
 	}
 
-	dataPVC := &corev1.PersistentVolumeClaim{}
-	err := r.Get(ctx, types.NamespacedName{Name: dataset.Name + "-data", Namespace: dataset.Namespace}, dataPVC)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("No data volume claimed. Creating PVC")
-		dataPVC, err := r.dataPvcForDataset(dataset)
-		if err != nil {
-			log.Error(err, "Failed to define new PVC resource for dataset data")
-			return ctrl.Result{}, err
-		}
-
-		log.Info("Creating new PVC", "PVC.Namespace", dataPVC.Namespace, "PVC.Name", dataPVC.Name)
-		if err = r.Create(ctx, dataPVC); err != nil {
-			log.Error(err, "Failed to create new PVC", "PVC.Namespace", dataPVC.Namespace, "PVC.Name", dataPVC.Name)
-			return ctrl.Result{}, err
-		}
-	} else if err != nil {
-		log.Error(err, "Failed to get dataPVC")
+	dataVolume := &corev1.PersistentVolumeClaim{}
+	log.Info("Fetching data volume")
+	if err := r.Get(ctx, types.NamespacedName{Name: req.Name + "-data", Namespace: req.Namespace}, dataVolume); client.IgnoreNotFound(err) != nil {
+		log.Error(err, "Error retrieving data volume")
 		return ctrl.Result{}, err
 	}
 
 	processingJob := &batchv1.Job{}
-	err = r.Get(ctx, types.NamespacedName{Name: dataset.Name, Namespace: dataset.Namespace}, processingJob)
-	if err != nil && errors.IsNotFound(err) {
-		log.Info("No processing job found. Starting processing job")
-		job, err := r.processingJobForDataset(dataset)
+	log.Info("Fetching processing job")
+	if err := r.Get(ctx, types.NamespacedName{Name: dataset.Name, Namespace: dataset.Namespace}, processingJob); client.IgnoreNotFound(err) != nil {
+		log.Error(err, "Error retrieving processing job")
+		return ctrl.Result{}, err
+	}
+
+	log.Info("Updating status")
+	if err := r.updateStatus(ctx, req, dataset, inputVolume, dataVolume, processingJob, log); err != nil {
+		log.Error(err, "Error updating status")
+	}
+
+	if inputVolume == nil || inputVolume.UID == "" {
+		log.Info("No input volume claimed. Creating PVC")
+		if err := r.createInputPVC(ctx, dataset, log); err != nil {
+			log.Error(err, "unable to create input PVC")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	if dataVolume == nil || dataVolume.UID == "" {
+		log.Info("No data volume claimed. Creating PVC")
+		err := r.createDataPVC(ctx, dataset, log)
 		if err != nil {
-			log.Error(err, "Failed to define new job resource for dataset processing job")
+			log.Error(err, "unable to create data PVC")
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, nil
+	}
 
-		log.Info("Creating new job", "job.Namespace", job.Namespace, "job.Name", job.Name)
-		if err = r.Create(ctx, job); err != nil {
-			log.Error(err, "Failed to create new job", "job.Namespace", job.Namespace, "job.Name", job.Name)
+	if processingJob == nil || processingJob.UID == "" {
+		log.Info("No processing job found. Creating new processing job")
+		if err := r.createProcessingJob(ctx, dataset, log); err != nil {
+			log.Error(err, "Error creating processing job")
 			return ctrl.Result{}, err
-		}
-	} else if err != nil {
-		log.Error(err, "Failed to get processing job")
-		return ctrl.Result{}, err
-	}
-
-	if err := r.Get(ctx, req.NamespacedName, dataset); err != nil {
-		log.Error(err, "Failed to re-fetch dataset")
-		return ctrl.Result{}, err
-	}
-
-	if !dataset.Status.FinishedProcessing {
-		for _, condition := range processingJob.Status.Conditions {
-			if condition.Type == batchv1.JobComplete && condition.Status == corev1.ConditionTrue {
-				dataset.Status.FinishedProcessing = true
-				err := r.Client.Status().Update(ctx, dataset)
-				if err != nil {
-					log.Error(err, "unable to update status with finished processing job")
-					return ctrl.Result{}, err
-				}
-			}
 		}
 	}
 
 	return ctrl.Result{}, nil
 }
 
+func (r *DatasetReconciler) updateStatus(ctx context.Context, req ctrl.Request, dataset *motisv1alpha1.Dataset, inputVolume *corev1.PersistentVolumeClaim, dataVolume *corev1.PersistentVolumeClaim, processingJob *batchv1.Job, log logr.Logger) error {
+	if inputVolume != nil {
+		dataset.Status.InputVolume = &corev1.PersistentVolumeClaimVolumeSource{ClaimName: inputVolume.Name}
+	} else {
+		dataset.Status.InputVolume = nil
+	}
+
+	if dataVolume != nil {
+		dataset.Status.DataVolume = &corev1.PersistentVolumeClaimVolumeSource{ClaimName: dataVolume.Name}
+	} else {
+		dataset.Status.DataVolume = nil
+	}
+
+	readyCondition := &motisv1alpha1.DatasetCondition{
+		Type:   motisv1alpha1.DatasetReady,
+		Status: corev1.ConditionUnknown,
+	}
+
+	if processingJob != nil {
+		for _, condition := range processingJob.Status.Conditions {
+			if condition.Type == batchv1.JobComplete {
+				switch condition.Status {
+				case corev1.ConditionTrue:
+					readyCondition.Status = corev1.ConditionTrue
+					break
+				case corev1.ConditionFalse:
+					readyCondition.Status = corev1.ConditionFalse
+					break
+				}
+			}
+		}
+	}
+
+	dataset.Status.Conditions = &[]motisv1alpha1.DatasetCondition{*readyCondition}
+
+	if err := r.Client.Status().Update(ctx, dataset); err != nil {
+		log.Error(err, "Error updating status")
+		return err
+	}
+
+	if err := r.Get(ctx, req.NamespacedName, dataset); err != nil {
+		log.Error(err, "Error fetching updated dataset")
+		return err
+	}
+	return nil
+}
+
 func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) error {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: "motis-input-claim-",
-			Namespace:    dataset.Namespace,
+			Name:      dataset.Name + "-input",
+			Namespace: dataset.Namespace,
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			AccessModes: []corev1.PersistentVolumeAccessMode{
@@ -166,19 +197,42 @@ func (r *DatasetReconciler) createInputPVC(ctx context.Context, dataset *motisv1
 		return err
 	}
 
-	dataset.Status.InputVolume = &corev1.PersistentVolumeClaimVolumeSource{
-		ClaimName: pvc.Name,
-	}
-
-	err = r.Client.Status().Update(ctx, dataset)
-	if err != nil {
-		log.Error(err, "unable to update status with new input pvc")
-		return err
-	}
 	return nil
 }
 
-func (r *DatasetReconciler) dataPvcForDataset(dataset *motisv1alpha1.Dataset) (*corev1.PersistentVolumeClaim, error) {
+func (r *DatasetReconciler) createDataPVC(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) error {
+	pvc := r.dataPvcForDataset(dataset)
+
+	if err := ctrl.SetControllerReference(dataset, pvc, r.Scheme); err != nil {
+		log.Error(err, "unable to set controller reference on data pvc")
+		return err
+	}
+
+	if err := r.Client.Create(ctx, pvc); err != nil {
+		log.Error(err, "unable to create data volume pvc")
+		return err
+	}
+
+	return nil
+}
+
+func (r *DatasetReconciler) createProcessingJob(ctx context.Context, dataset *motisv1alpha1.Dataset, log logr.Logger) error {
+	job := r.processingJobForDataset(dataset)
+
+	if err := ctrl.SetControllerReference(dataset, job, r.Scheme); err != nil {
+		log.Error(err, "unable to set controller reference on processing job")
+		return err
+	}
+
+	if err := r.Client.Create(ctx, job); err != nil {
+		log.Error(err, "unable to create processing job")
+		return err
+	}
+
+	return nil
+}
+
+func (r *DatasetReconciler) dataPvcForDataset(dataset *motisv1alpha1.Dataset) *corev1.PersistentVolumeClaim {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dataset.Name + "-data",
@@ -196,14 +250,10 @@ func (r *DatasetReconciler) dataPvcForDataset(dataset *motisv1alpha1.Dataset) (*
 		},
 	}
 
-	if err := ctrl.SetControllerReference(dataset, pvc, r.Scheme); err != nil {
-		return nil, err
-	}
-
-	return pvc, nil
+	return pvc
 }
 
-func (r *DatasetReconciler) processingJobForDataset(dataset *motisv1alpha1.Dataset) (*batchv1.Job, error) {
+func (r *DatasetReconciler) processingJobForDataset(dataset *motisv1alpha1.Dataset) *batchv1.Job {
 	processJob := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dataset.Name,
@@ -273,13 +323,7 @@ func (r *DatasetReconciler) processingJobForDataset(dataset *motisv1alpha1.Datas
 			},
 		},
 	}
-
-	err := ctrl.SetControllerReference(dataset, processJob, r.Scheme)
-	if err != nil {
-		return nil, err
-	}
-
-	return processJob, nil
+	return processJob
 }
 
 // SetupWithManager sets up the controller with the Manager.
