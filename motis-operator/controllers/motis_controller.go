@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"github.com/go-logr/logr"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -72,16 +73,16 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, nil
 	}
 
-	servicePod := &corev1.Pod{}
-	if err := r.Get(ctx, req.NamespacedName, servicePod); client.IgnoreNotFound(err) != nil {
-		log.Error(err, "Failed to get Motis service pod")
+	deployment := &appsv1.Deployment{}
+	if err := r.Get(ctx, req.NamespacedName, deployment); client.IgnoreNotFound(err) != nil {
+		log.Error(err, "Failed to get Motis deployment")
 		return ctrl.Result{}, err
 	}
 
-	if dataset.HasFinishedProcessing() && (servicePod == nil || servicePod.UID == "") {
-		log.Info("Dataset has finished processing and there currently is no service pod. Starting new service pod.")
-		if err := r.createServicePod(ctx, motis, dataset, log); err != nil {
-			log.Error(err, "Error creating Motis service pod")
+	if dataset.HasFinishedProcessing() && (deployment == nil || deployment.UID == "") {
+		log.Info("Dataset has finished processing and there currently is no deployment. Starting new deployment.")
+		if err := r.createDeployment(ctx, motis, dataset, log); err != nil {
+			log.Error(err, "Error creating Motis deployment")
 		}
 	}
 
@@ -104,17 +105,17 @@ func (r *MotisReconciler) createDataset(ctx context.Context, motis *motisv1alpha
 	return nil
 }
 
-func (r *MotisReconciler) createServicePod(ctx context.Context, motis *motisv1alpha1.Motis, dataset *motisv1alpha1.Dataset, log logr.Logger) error {
-	pod := servicePodForMotis(motis, dataset.Status.InputVolume, dataset.Status.DataVolume)
+func (r *MotisReconciler) createDeployment(ctx context.Context, motis *motisv1alpha1.Motis, dataset *motisv1alpha1.Dataset, log logr.Logger) error {
+	pod := deploymentForMotis(motis, dataset)
 
 	if err := ctrl.SetControllerReference(motis, pod, r.Scheme); err != nil {
-		log.Error(err, "Error setting controller reference for service pod")
+		log.Error(err, "Error setting controller reference for deployment")
 		return err
 	}
 
-	log.Info("Creating new motis service pod")
+	log.Info("Creating new motis deployment")
 	if err := r.Create(ctx, pod); err != nil {
-		log.Error(err, "Failed to create motis service pod")
+		log.Error(err, "Failed to create motis deployment")
 		return err
 	}
 
@@ -133,55 +134,67 @@ func datasetForMotis(motis *motisv1alpha1.Motis) *motisv1alpha1.Dataset {
 	}
 }
 
-func servicePodForMotis(motis *motisv1alpha1.Motis, inputVolume *corev1.VolumeSource, dataVolume *corev1.VolumeSource) *corev1.Pod {
-	return &corev1.Pod{
+func deploymentForMotis(motis *motisv1alpha1.Motis, dataset *motisv1alpha1.Dataset) *appsv1.Deployment {
+	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			GenerateName: motis.Name,
-			Namespace:    motis.Namespace,
-			Labels: map[string]string{
-				"motis-project.de/name": "MotisWeb",
-			},
+			Name:      motis.Name,
+			Namespace: motis.Namespace,
 		},
-		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{
-					Name:    "motis",
-					Image:   "ghcr.io/motis-project/motis:latest",
-					Command: []string{"/motis/motis", "--system_config", "/system_config.ini", "-c", "/config/config.ini"},
-					Ports: []corev1.ContainerPort{
-						{
-							ContainerPort: 8080,
-						},
-					},
-					VolumeMounts: []corev1.VolumeMount{
-						{
-							Name:      "data-volume",
-							MountPath: "/data",
-						},
-						{
-							Name:      "input-volume",
-							MountPath: "/input",
-						},
-						{
-							Name:      "config",
-							MountPath: "/config",
-						},
-					},
+		Spec: appsv1.DeploymentSpec{
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"motis-project.de/motis-deployment": motis.Name,
 				},
 			},
-			Volumes: []corev1.Volume{
-				{
-					Name:         "data-volume",
-					VolumeSource: *dataVolume,
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"motis-project.de/motis-deployment": motis.Name,
+						"motis-project.de/name":             "MotisWeb",
+					},
 				},
-				{
-					Name:         "input-volume",
-					VolumeSource: *inputVolume,
-				},
-				{
-					Name: "config",
-					VolumeSource: corev1.VolumeSource{
-						ConfigMap: motis.Spec.Config,
+				Spec: corev1.PodSpec{
+					Containers: []corev1.Container{
+						{
+							Name:    "motis",
+							Image:   "ghcr.io/motis-project/motis:latest",
+							Command: []string{"/motis/motis", "--system_config", "/system_config.ini", "-c", "/config/config.ini"},
+							Ports: []corev1.ContainerPort{
+								{
+									ContainerPort: 8080,
+								},
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{
+									Name:      "data-volume",
+									MountPath: "/data",
+								},
+								{
+									Name:      "input-volume",
+									MountPath: "/input",
+								},
+								{
+									Name:      "config",
+									MountPath: "/config",
+								},
+							},
+						},
+					},
+					Volumes: []corev1.Volume{
+						{
+							Name:         "data-volume",
+							VolumeSource: *dataset.Status.DataVolume,
+						},
+						{
+							Name:         "input-volume",
+							VolumeSource: *dataset.Status.InputVolume,
+						},
+						{
+							Name: "config",
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: motis.Spec.Config,
+							},
+						},
 					},
 				},
 			},

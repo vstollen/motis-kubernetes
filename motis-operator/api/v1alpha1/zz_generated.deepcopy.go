@@ -125,12 +125,8 @@ func (in *DatasetStatus) DeepCopyInto(out *DatasetStatus) {
 	*out = *in
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = new([]DatasetCondition)
-		if **in != nil {
-			in, out := *in, *out
-			*out = make([]DatasetCondition, len(*in))
-			copy(*out, *in)
-		}
+		*out = make([]DatasetCondition, len(*in))
+		copy(*out, *in)
 	}
 	if in.InputVolume != nil {
 		in, out := &in.InputVolume, &out.InputVolume

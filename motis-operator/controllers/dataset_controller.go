@@ -157,7 +157,7 @@ func (r *DatasetReconciler) updateStatus(ctx context.Context, req ctrl.Request, 
 		}
 	}
 
-	dataset.Status.Conditions = &[]motisv1alpha1.DatasetCondition{*readyCondition}
+	dataset.Status.Conditions = []motisv1alpha1.DatasetCondition{*readyCondition}
 
 	if err := r.Client.Status().Update(ctx, dataset); err != nil {
 		log.Error(err, "Error updating status")

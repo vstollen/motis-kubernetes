@@ -38,7 +38,7 @@ type DatasetStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	Conditions *[]DatasetCondition `json:"conditions"`
+	Conditions []DatasetCondition `json:"conditions"`
 
 	// A pointer to the pvc of the Motis input volume.
 	// +optional
@@ -75,7 +75,7 @@ type Dataset struct {
 }
 
 func (d *Dataset) HasFinishedProcessing() bool {
-	for _, condition := range *d.Status.Conditions {
+	for _, condition := range d.Status.Conditions {
 		if condition.Type == DatasetReady {
 			return condition.Status == corev1.ConditionTrue
 		}
