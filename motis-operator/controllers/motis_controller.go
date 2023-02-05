@@ -118,6 +118,13 @@ func (r *MotisReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			log.Error(err, "Error creating Motis deployment")
 			return scheduledResult, err
 		}
+		return scheduledResult, nil
+	}
+
+	deployment.Spec.Template.Spec.Volumes = volumesForMotisDeployment(motis, latestFinishedDataset)
+	if err := r.Update(ctx, deployment); err != nil {
+		log.Error(err, "Error updating Motis deployment")
+		return scheduledResult, err
 	}
 
 	return scheduledResult, nil
@@ -214,23 +221,27 @@ func deploymentForMotis(motis *motisv1alpha1.Motis, dataset *motisv1alpha1.Datas
 							},
 						},
 					},
-					Volumes: []corev1.Volume{
-						{
-							Name:         "data-volume",
-							VolumeSource: *dataset.Status.DataVolume,
-						},
-						{
-							Name:         "input-volume",
-							VolumeSource: *dataset.Status.InputVolume,
-						},
-						{
-							Name: "config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: motis.Spec.Config,
-							},
-						},
-					},
+					Volumes: volumesForMotisDeployment(motis, dataset),
 				},
+			},
+		},
+	}
+}
+
+func volumesForMotisDeployment(motis *motisv1alpha1.Motis, dataset *motisv1alpha1.Dataset) []corev1.Volume {
+	return []corev1.Volume{
+		{
+			Name:         "data-volume",
+			VolumeSource: *dataset.Status.DataVolume,
+		},
+		{
+			Name:         "input-volume",
+			VolumeSource: *dataset.Status.InputVolume,
+		},
+		{
+			Name: "config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: motis.Spec.Config,
 			},
 		},
 	}
